@@ -8,57 +8,78 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="草莓饮食">
-  <link rel="manifest" href="./manifest.webmanifest">
-  <link rel="apple-touch-icon" sizes="180x180" href="./icon-180.png">
+  <link rel="manifest" href="./manifest.webmanifest?v=20260722d1">
+  <link rel="apple-touch-icon" href="./icon-180.png">
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./styles.css">
+  <link rel="stylesheet" href="./styles.css?v=20260722d1">
 </head>
 <body>
   <main class="app-shell">
     <header class="topbar">
       <div>
-        <p class="eyebrow">循环打卡</p>
+        <p class="eyebrow">平常饮食</p>
         <h1>草莓饮食-平常的饮食</h1>
       </div>
-      <button class="icon-button" id="undoBtn" type="button" aria-label="撤回上一天">↶</button>
+      <button class="icon-button" id="resetTodayBtn" type="button" aria-label="重置今天">↺</button>
     </header>
 
-    <section class="cycle-panel">
+    <section class="status-panel">
       <div>
-        <span class="label">当前进度</span>
-        <strong id="cycleTitle">第 1 轮 · 第 1 天</strong>
-        <p id="cycleSub">完成今天后自动进入下一天</p>
+        <span class="label">当前选择</span>
+        <strong id="activePlanName">未选择餐单</strong>
+        <p id="activePlanDesc">先从餐单库选择今天要执行的一份。</p>
       </div>
-      <div class="meter" aria-label="今日完成度">
-        <span id="percentText">0%</span>
+      <div class="progress-ring" aria-label="今日完成度">
+        <span id="progressText">0%</span>
       </div>
     </section>
 
-    <section class="plan-panel">
-      <div class="section-head">
-        <h2 id="dayName">今日餐单</h2>
-        <span id="slotCount">0/0</span>
-      </div>
-      <div class="meal-list" id="mealList"></div>
-      <p class="auto-note" id="autoNote">打完所有餐次后，会短暂停留并自动进入下一天。</p>
+    <section class="notice">
+      <strong>不再循环，今天想吃哪份就选哪份。</strong>
+      <span>先看餐单内容，再设为今天；打完所有餐次后手动保存记录，明天重新选择。</span>
     </section>
 
     <section>
       <div class="section-head">
-        <h2>循环餐单</h2>
-        <button class="text-button" id="resetBtn" type="button">重置</button>
+        <h2>选择餐单</h2>
+        <span id="planCount">0 个</span>
       </div>
-      <div class="preview-list" id="previewList"></div>
+      <div class="filter-bar" id="filterBar" aria-label="餐单分类"></div>
+      <div class="detail-panel" id="detailPanel" aria-live="polite"></div>
+      <div class="plan-list" id="planList"></div>
+    </section>
+
+    <section class="today-panel" id="todayPanel">
+      <div class="section-head">
+        <h2>今天照着做</h2>
+        <span id="stepCount">0/0</span>
+      </div>
+      <div class="step-list" id="stepList"></div>
+      <button class="primary-button" id="completeBtn" type="button" disabled>完成今天</button>
+      <p class="auto-note" id="autoNote">不会自动进入下一份；明天重新选择。</p>
     </section>
 
     <section>
       <div class="section-head">
-        <h2>完成记录</h2>
-        <span id="historyCount">0 天</span>
+        <h2>最近记录</h2>
+        <button class="text-button" id="clearHistoryBtn" type="button">清空</button>
       </div>
       <div class="history-list" id="historyList"></div>
     </section>
+
+
+    <section class="source-panel">
+      <details>
+        <summary>
+          <span>来源与边界</span>
+          <em>非官方整理</em>
+        </summary>
+        <p>草莓饮食平常餐单整理版，仅作为个人打卡工具。数据保存在当前浏览器，不含账号、服务端和第三方接口。</p>
+        <p>餐单适合普通控饮食日；身体不舒服、低血糖、经期明显不适、备孕/孕期/哺乳期、疾病或用药期间不要硬跟。</p>
+        <button class="text-button danger" id="resetAllBtn" type="button">重置全部打卡数据</button>
+      </details>
+    </section>
   </main>
-  <script src="./app.js"></script>
+  <script src="./app.js?v=20260722d1"></script>
 </body>
 </html>
