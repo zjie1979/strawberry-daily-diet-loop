@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>草莓饮食-平常的饮食</title>
+  <meta name="theme-color" content="#2f6f63">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="草莓饮食">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="apple-touch-icon" sizes="180x180" href="./icon-180.png">
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <main class="app-shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">循环打卡</p>
+        <h1>草莓饮食-平常的饮食</h1>
+      </div>
+      <button class="icon-button" id="undoBtn" type="button" aria-label="撤回上一天">↶</button>
+    </header>
+
+    <section class="cycle-panel">
+      <div>
+        <span class="label">当前进度</span>
+        <strong id="cycleTitle">第 1 轮 · 第 1 天</strong>
+        <p id="cycleSub">完成今天后自动进入下一天</p>
+      </div>
+      <div class="meter" aria-label="今日完成度">
+        <span id="percentText">0%</span>
+      </div>
+    </section>
+
+    <section class="plan-panel">
+      <div class="section-head">
+        <h2 id="dayName">今日餐单</h2>
+        <span id="slotCount">0/0</span>
+      </div>
+      <div class="meal-list" id="mealList"></div>
+      <p class="auto-note" id="autoNote">打完所有餐次后，会短暂停留并自动进入下一天。</p>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <h2>循环餐单</h2>
+        <button class="text-button" id="resetBtn" type="button">重置</button>
+      </div>
+      <div class="preview-list" id="previewList"></div>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <h2>完成记录</h2>
+        <span id="historyCount">0 天</span>
+      </div>
+      <div class="history-list" id="historyList"></div>
+    </section>
+  </main>
+  <script src="./app.js"></script>
+</body>
+</html>
