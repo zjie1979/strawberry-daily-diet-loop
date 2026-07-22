@@ -67,28 +67,30 @@ const mealPlans = days.map((day, index) => ({
   rules: ["普通饮食日使用，当天手动保存记录。"]
 }));
 
-(function dailyRuntime() {
+const APP_SOURCE_TEXT = [
+  "草莓饮食平常餐单整理版，仅作为个人打卡工具。数据保存在当前浏览器，不含账号、服务端和第三方接口。",
+  "餐单适合普通控饮食日；身体不舒服、低血糖、经期明显不适、备孕/孕期/哺乳期、疾病或用药期间不要硬跟。"
+];
+
+(function tabbedRuntime() {
   const pendingItems = typeof pendingNotes !== "undefined"
     ? pendingNotes
     : (typeof pendingPlans !== "undefined" ? pendingPlans : []);
-  const categories = ["全部", ...Array.from(new Set(mealPlans.map((plan) => plan.series || "其他")))];
+  const seriesNames = Array.from(new Set(mealPlans.map((plan) => plan.series || "其他")));
   const planById = new Map(mealPlans.map((plan) => [plan.id, plan]));
+  const sourceLines = APP_SOURCE_TEXT;
   const nodes = {
+    todayDate: document.querySelector("#todayDate"),
     activePlanName: document.querySelector("#activePlanName"),
     activePlanDesc: document.querySelector("#activePlanDesc"),
     progressText: document.querySelector("#progressText"),
-    planCount: document.querySelector("#planCount"),
-    filterBar: document.querySelector("#filterBar"),
-    detailPanel: document.querySelector("#detailPanel"),
-    planList: document.querySelector("#planList"),
     stepList: document.querySelector("#stepList"),
-    stepCount: document.querySelector("#stepCount"),
     completeBtn: document.querySelector("#completeBtn"),
     autoNote: document.querySelector("#autoNote"),
-    historyList: document.querySelector("#historyList"),
-    historyCount: document.querySelector("#historyCount"),
-    pendingList: document.querySelector("#pendingList"),
-    pendingCount: document.querySelector("#pendingCount")
+    libraryTitle: document.querySelector("#libraryTitle"),
+    librarySub: document.querySelector("#librarySub"),
+    libraryContent: document.querySelector("#libraryContent"),
+    recordsContent: document.querySelector("#recordsContent")
   };
 
   const state = loadState();
@@ -96,9 +98,11 @@ const mealPlans = days.map((day, index) => ({
   function defaultState() {
     const firstId = mealPlans[0]?.id || "";
     return {
+      tab: "today",
       activePlanId: firstId,
-      detailId: firstId,
-      filter: "全部",
+      selectedSeries: "",
+      detailId: "",
+      recordSeries: "",
       checked: {},
       history: []
     };
@@ -113,20 +117,12 @@ const mealPlans = days.map((day, index) => ({
       if (!storedRaw && typeof LEGACY_STORAGE_KEY !== "undefined") {
         legacy = JSON.parse(localStorage.getItem(LEGACY_STORAGE_KEY) || "{}");
       }
-
-      const legacyActiveId = getLegacyActiveId(legacy);
-      const activePlanId = validPlanId(stored.activePlanId || stored.activeId)
-        || validPlanId(legacyActiveId)
-        || base.activePlanId;
-      const detailId = validPlanId(stored.detailId) || activePlanId;
-      const next = {
-        activePlanId,
-        detailId,
-        filter: categories.includes(stored.filter) ? stored.filter : "全部",
-        checked: stored.checked && typeof stored.checked === "object" && !Array.isArray(stored.checked) ? stored.checked : {},
-        history: normalizeHistory(Array.isArray(stored.history) ? stored.history : legacy.history)
-      };
-
+      const activePlanId = validPlanId(stored.activePlanId || stored.activeId || getLegacyActiveId(legacy)) || base.activePlanId;
+      const selectedSeries = seriesNames.includes(stored.selectedSeries) ? stored.selectedSeries : "";
+      const detailId = validPlanId(stored.detailId) || "";
+      const recordSeries = seriesNames.includes(stored.recordSeries) ? stored.recordSeries : "";
+      const checked = stored.checked && typeof stored.checked === "object" && !Array.isArray(stored.checked) ? stored.checked : {};
+      const history = normalizeHistory(Array.isArray(stored.history) ? stored.history : legacy.history);
       const legacyChecked = Array.isArray(stored.completedMeals)
         ? stored.completedMeals
         : (Array.isArray(legacy.checked) ? legacy.checked : []);
@@ -135,11 +131,19 @@ const mealPlans = days.map((day, index) => ({
         const indexes = normalizeCheckedIndexes(legacyChecked, plan);
         if (indexes.length) {
           const date = todayKey();
-          next.checked[date] ||= {};
-          next.checked[date][activePlanId] ||= indexes;
+          checked[date] ||= {};
+          checked[date][activePlanId] ||= indexes;
         }
       }
-      return next;
+      return {
+        tab: ["today", "library", "records"].includes(stored.tab) ? stored.tab : "today",
+        activePlanId,
+        selectedSeries,
+        detailId,
+        recordSeries,
+        checked,
+        history
+      };
     } catch {
       return base;
     }
@@ -152,10 +156,12 @@ const mealPlans = days.map((day, index) => ({
     if (Array.isArray(legacy.selectedIds)) {
       return legacy.selectedIds[Number.isInteger(legacy.currentIndex) ? legacy.currentIndex : 0];
     }
-    if (Number.isInteger(legacy.dayIndex)) {
-      return "day-" + (legacy.dayIndex + 1);
-    }
+    if (Number.isInteger(legacy.dayIndex)) return "day-" + (legacy.dayIndex + 1);
     return "";
+  }
+
+  function validPlanId(id) {
+    return planById.has(id) ? id : "";
   }
 
   function normalizeCheckedIndexes(values, plan) {
@@ -179,11 +185,7 @@ const mealPlans = days.map((day, index) => ({
         planName: String(planName || "餐单"),
         steps: Number(item.steps || plan?.meals?.length || 0)
       };
-    }).filter(Boolean).slice(0, 80);
-  }
-
-  function validPlanId(id) {
-    return planById.has(id) ? id : "";
+    }).filter(Boolean).slice(0, 120);
   }
 
   function saveState() {
@@ -197,13 +199,14 @@ const mealPlans = days.map((day, index) => ({
     return `${date.getFullYear()}-${month}-${day}`;
   }
 
+  function todayLabel() {
+    const date = new Date();
+    return `${date.getMonth() + 1}/${date.getDate()}`;
+  }
+
   function getActivePlan() {
     if (!planById.has(state.activePlanId)) state.activePlanId = mealPlans[0]?.id || "";
     return planById.get(state.activePlanId);
-  }
-
-  function getDetailPlan() {
-    return planById.get(state.detailId) || getActivePlan() || mealPlans[0];
   }
 
   function getCheckedSet() {
@@ -226,13 +229,25 @@ const mealPlans = days.map((day, index) => ({
     saveState();
   }
 
-  function getProgress() {
+  function progressForActive() {
     const plan = getActivePlan();
     if (!plan) return { done: 0, total: 0, percent: 0 };
-    const checked = getCheckedSet();
-    const done = checked.size;
+    const done = getCheckedSet().size;
     const total = plan.meals.length;
     return { done, total, percent: total ? Math.round((done / total) * 100) : 0 };
+  }
+
+  function countByPlan() {
+    const counts = new Map(mealPlans.map((plan) => [plan.id, 0]));
+    state.history.forEach((item) => counts.set(item.planId, (counts.get(item.planId) || 0) + 1));
+    return counts;
+  }
+
+  function seriesStats(series) {
+    const counts = countByPlan();
+    const plans = mealPlans.filter((plan) => plan.series === series);
+    const done = plans.reduce((sum, plan) => sum + (counts.get(plan.id) || 0), 0);
+    return { plans, done };
   }
 
   function isRecorded(plan) {
@@ -240,84 +255,33 @@ const mealPlans = days.map((day, index) => ({
     return state.history.some((item) => item.date === date && item.planId === plan.id);
   }
 
-  function renderStatus() {
+  function setTab(tab) {
+    state.tab = tab;
+    saveState();
+    render();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function renderTabs() {
+    document.querySelectorAll(".view").forEach((view) => view.classList.remove("is-active"));
+    document.querySelector(`#view${state.tab[0].toUpperCase()}${state.tab.slice(1)}`)?.classList.add("is-active");
+    document.querySelectorAll(".tab-button").forEach((button) => {
+      button.classList.toggle("is-active", button.dataset.tab === state.tab);
+    });
+  }
+
+  function renderToday() {
     const plan = getActivePlan();
-    const progress = getProgress();
-    nodes.activePlanName.textContent = plan ? plan.title : "未选择餐单";
-    nodes.activePlanDesc.textContent = plan ? `${plan.series || "餐单"} · ${plan.summary || ""}` : "先从餐单库选择今天要执行的一份。";
-    nodes.progressText.textContent = `${progress.percent}%`;
-    document.documentElement.style.setProperty("--progress", `${progress.percent}%`);
-  }
-
-  function renderFilters() {
-    if (!nodes.filterBar) return;
-    nodes.filterBar.innerHTML = categories.map((category) => `
-      <button class="filter-chip ${state.filter === category ? "active" : ""}" type="button" data-filter="${escapeHtml(category)}">${escapeHtml(category)}</button>
-    `).join("");
-  }
-
-  function renderDetail() {
-    const plan = getDetailPlan();
-    if (!plan) {
-      nodes.detailPanel.innerHTML = `<p class="empty">还没有餐单。</p>`;
-      return;
-    }
-    const selected = state.activePlanId === plan.id;
-    nodes.detailPanel.innerHTML = `
-      <span class="detail-label">详情预览</span>
-      <h2>${escapeHtml(plan.title)}</h2>
-      <p>${escapeHtml(plan.fit || plan.summary || "")}</p>
-      <div class="meta-row">
-        <span>${escapeHtml(plan.series || "餐单")}</span>
-        <span>${plan.meals.length} 餐次</span>
-        <span>${escapeHtml(plan.source || "整理版")}</span>
-        <span>${selected ? "今日餐单" : "未选择"}</span>
-      </div>
-      <div class="detail-meals">
-        ${plan.meals.map((meal) => `
-          <div>
-            <strong>${escapeHtml(meal.slot)}${meal.tag ? " · " + escapeHtml(meal.tag) : ""}</strong>
-            <span>${escapeHtml(meal.food)}</span>
-          </div>
-        `).join("")}
-      </div>
-      <ul class="detail-rules">
-        ${(plan.rules || []).map((rule) => `<li>${escapeHtml(rule)}</li>`).join("")}
-      </ul>
-      <div class="detail-actions">
-        <button class="primary-button" type="button" data-set-current="${escapeHtml(plan.id)}">${selected ? "今天已选" : "设为今天"}</button>
-        <a class="secondary-link" href="#todayPanel">去打卡</a>
-      </div>
-    `;
-  }
-
-  function renderPlans() {
-    const visible = state.filter === "全部" ? mealPlans : mealPlans.filter((plan) => plan.series === state.filter);
-    nodes.planCount.textContent = `${visible.length}/${mealPlans.length} 个`;
-    nodes.planList.innerHTML = visible.map((plan) => {
-      const selected = plan.id === state.activePlanId;
-      return `
-        <article class="plan-card ${state.detailId === plan.id ? "active" : ""}">
-          <button class="plan-main" type="button" data-detail="${escapeHtml(plan.id)}">
-            <span class="badge ${selected ? "strong" : ""}">${escapeHtml(plan.series || "餐单")}</span>
-            <strong>${escapeHtml(plan.title)}</strong>
-            <em>${escapeHtml(plan.summary || "")}</em>
-            <small>${plan.meals.length} 餐次 · ${escapeHtml(plan.source || "整理版")}</small>
-          </button>
-          <button class="small-action ${selected ? "selected" : ""}" type="button" data-set-current="${escapeHtml(plan.id)}">${selected ? "今日" : "选今天"}</button>
-        </article>
-      `;
-    }).join("");
-  }
-
-  function renderSteps() {
-    const plan = getActivePlan();
-    const progress = getProgress();
+    const progress = progressForActive();
     const checked = getCheckedSet();
     const recorded = plan ? isRecorded(plan) : false;
-    nodes.stepCount.textContent = `${progress.done}/${progress.total}`;
+    nodes.todayDate.textContent = todayLabel();
+    nodes.activePlanName.textContent = plan ? plan.title : "未选择餐单";
+    nodes.activePlanDesc.textContent = plan ? `${plan.series || "餐单"} · ${plan.summary || ""}` : "去餐单库选一份作为今天的打卡内容。";
+    nodes.progressText.textContent = `${progress.percent}%`;
+    document.documentElement.style.setProperty("--progress", `${progress.percent}%`);
     if (!plan) {
-      nodes.stepList.innerHTML = `<p class="empty">先从餐单库选择今天要打卡的餐单。</p>`;
+      nodes.stepList.innerHTML = `<p class="empty">先去餐单库选择今天要打卡的餐单。</p>`;
       nodes.completeBtn.disabled = true;
       return;
     }
@@ -338,68 +302,223 @@ const mealPlans = days.map((day, index) => ({
     nodes.autoNote.classList.toggle("done", recorded || progress.done === progress.total);
   }
 
-  function renderHistory() {
-    if (nodes.historyCount) nodes.historyCount.textContent = `${state.history.length} 天`;
-    const items = state.history.slice(0, 12);
-    if (!items.length) {
-      nodes.historyList.innerHTML = `<p class="empty">还没有完成记录。</p>`;
+  function renderLibrary() {
+    if (state.detailId && planById.has(state.detailId)) {
+      renderPlanDetail(planById.get(state.detailId));
       return;
     }
-    nodes.historyList.innerHTML = items.map((item) => `
-      <article class="history-item">
-        <strong>${escapeHtml(item.planName)}</strong>
-        <span>${escapeHtml(item.date)} 完成 · ${Number(item.steps) || 0} 项</span>
-      </article>
-    `).join("");
+    if (state.selectedSeries) {
+      renderSeriesPlans(state.selectedSeries);
+      return;
+    }
+    nodes.libraryTitle.textContent = "餐单库";
+    nodes.librarySub.textContent = "先选系列，再看这个系列里的每天可选餐单。";
+    nodes.libraryContent.innerHTML = `
+      <div class="series-grid">
+        ${seriesNames.map((series) => {
+          const stats = seriesStats(series);
+          return `
+            <button class="series-card" type="button" data-series="${escapeHtml(series)}">
+              <strong>${escapeHtml(series)}</strong>
+              <span class="muted">${stats.plans.length} 个可选餐单</span>
+              <span class="series-meta">
+                <span class="count-pill">已打卡 ${stats.done} 次</span>
+                <span class="count-pill">点进系列</span>
+              </span>
+            </button>
+          `;
+        }).join("")}
+      </div>
+    `;
   }
 
-  function renderPending() {
-    if (!nodes.pendingList || !nodes.pendingCount) return;
-    nodes.pendingCount.textContent = `${pendingItems.length} 个`;
-    nodes.pendingList.innerHTML = pendingItems.length
-      ? pendingItems.map((item) => `
-        <article class="pending-item">
-          <strong>${escapeHtml(item.title)}</strong>
-          <span>${escapeHtml(item.reason)}</span>
-        </article>
-      `).join("")
-      : `<p class="empty">暂无待补说明。</p>`;
+  function renderSeriesPlans(series) {
+    const stats = seriesStats(series);
+    nodes.libraryTitle.textContent = series;
+    nodes.librarySub.textContent = `${stats.plans.length} 个可选餐单，先看详情再设为今天。`;
+    nodes.libraryContent.innerHTML = `
+      <div class="library-tools">
+        <button class="plain-button" type="button" data-back-series>全部系列</button>
+        <span class="pill">已打卡 ${stats.done} 次</span>
+      </div>
+      <div class="plan-list">
+        ${stats.plans.map((plan) => {
+          const active = state.activePlanId === plan.id;
+          return `
+            <article class="plan-card ${active ? "active" : ""}">
+              <div class="plan-title">
+                <span class="badge">${escapeHtml(plan.series || "餐单")}</span>
+                <strong>${escapeHtml(plan.title)}</strong>
+                <em>${escapeHtml(plan.summary || "")}</em>
+                <small>${plan.meals.length} 餐次 · 已打卡 ${countByPlan().get(plan.id) || 0} 次</small>
+              </div>
+              <div class="row-actions">
+                <button class="secondary-button" type="button" data-plan-detail="${escapeHtml(plan.id)}">看详情</button>
+                <button class="primary-button" type="button" data-set-current="${escapeHtml(plan.id)}">${active ? "今天已选" : "设为今天"}</button>
+              </div>
+            </article>
+          `;
+        }).join("")}
+      </div>
+    `;
+  }
+
+  function renderPlanDetail(plan) {
+    nodes.libraryTitle.textContent = "餐单详情";
+    nodes.librarySub.textContent = plan.series || "餐单";
+    const active = state.activePlanId === plan.id;
+    nodes.libraryContent.innerHTML = `
+      <div class="library-tools">
+        <button class="plain-button" type="button" data-close-detail>返回${escapeHtml(plan.series || "系列")}</button>
+        <span class="pill">已打卡 ${countByPlan().get(plan.id) || 0} 次</span>
+      </div>
+      <article class="panel-card">
+        <div class="detail-head">
+          <span class="badge">${escapeHtml(plan.series || "餐单")}</span>
+          <h2>${escapeHtml(plan.title)}</h2>
+          <p class="muted">${escapeHtml(plan.fit || plan.summary || "")}</p>
+        </div>
+        <div class="meta-row">
+          <span class="count-pill">${plan.meals.length} 餐次</span>
+          <span class="count-pill">${escapeHtml(plan.source || "整理版")}</span>
+          <span class="count-pill">${active ? "今日餐单" : "未选择"}</span>
+        </div>
+        <div class="detail-meals">
+          ${plan.meals.map((meal) => `
+            <div>
+              <strong>${escapeHtml(meal.slot)}${meal.tag ? " · " + escapeHtml(meal.tag) : ""}</strong>
+              <span>${escapeHtml(meal.food)}</span>
+            </div>
+          `).join("")}
+        </div>
+        <ul class="detail-rules">
+          ${(plan.rules || []).map((rule) => `<li>${escapeHtml(rule)}</li>`).join("")}
+        </ul>
+        <div class="row-actions">
+          <button class="secondary-button" type="button" data-close-detail>返回列表</button>
+          <button class="primary-button" type="button" data-set-current="${escapeHtml(plan.id)}">${active ? "今天已选" : "设为今天"}</button>
+        </div>
+      </article>
+    `;
+  }
+
+  function renderRecords() {
+    const counts = countByPlan();
+    const completedPlans = [...counts.values()].filter((value) => value > 0).length;
+    if (state.recordSeries) {
+      renderRecordSeries(state.recordSeries, counts);
+      return;
+    }
+    const topPlans = mealPlans
+      .map((plan) => ({ plan, count: counts.get(plan.id) || 0 }))
+      .filter((item) => item.count > 0)
+      .sort((a, b) => b.count - a.count || a.plan.title.localeCompare(b.plan.title, "zh-Hans"))
+      .slice(0, 5);
+    nodes.recordsContent.innerHTML = `
+      <div class="stat-grid">
+        <div><span>完成次数</span><strong>${state.history.length}</strong></div>
+        <div><span>打卡过餐单</span><strong>${completedPlans}</strong></div>
+        <div><span>餐单总数</span><strong>${mealPlans.length}</strong></div>
+      </div>
+      <section class="panel-card">
+        <h3>按系列看次数</h3>
+        <div class="series-grid" style="margin-top:10px">
+          ${seriesNames.map((series) => {
+            const stats = seriesStats(series);
+            return `
+              <button class="series-card" type="button" data-record-series="${escapeHtml(series)}">
+                <strong>${escapeHtml(series)}</strong>
+                <span class="muted">${stats.plans.length} 个餐单</span>
+                <span class="series-meta"><span class="count-pill">已打卡 ${stats.done} 次</span></span>
+              </button>
+            `;
+          }).join("")}
+        </div>
+      </section>
+      <section class="panel-card">
+        <h3>常用餐单</h3>
+        <div class="record-list" style="margin-top:10px">
+          ${topPlans.length ? topPlans.map(({ plan, count }) => recordPlanRow(plan, count)).join("") : `<p class="empty">还没有完成记录。</p>`}
+        </div>
+      </section>
+      <section class="panel-card">
+        <div class="record-tools">
+          <h3>最近记录</h3>
+          <button class="plain-button" type="button" data-clear-history>清空</button>
+        </div>
+        <div class="recent-list">
+          ${state.history.length ? state.history.slice(0, 8).map((item) => `
+            <article class="recent-item">
+              <strong>${escapeHtml(item.planName)}</strong>
+              <span>${escapeHtml(item.date)} 完成 · ${Number(item.steps) || 0} 项</span>
+            </article>
+          `).join("") : `<p class="empty">还没有完成记录。</p>`}
+        </div>
+      </section>
+      <section class="source-panel">
+        <details>
+          <summary><span>来源与边界</span><em>非官方整理</em></summary>
+          ${sourceLines.map((line) => `<p>${escapeHtml(line)}</p>`).join("")}
+          <button class="plain-button" type="button" data-reset-all>重置全部打卡数据</button>
+        </details>
+      </section>
+    `;
+  }
+
+  function renderRecordSeries(series, counts) {
+    const stats = seriesStats(series);
+    nodes.recordsContent.innerHTML = `
+      <div class="record-tools">
+        <button class="plain-button" type="button" data-record-back>全部系列</button>
+        <span class="pill">${escapeHtml(series)} · ${stats.done} 次</span>
+      </div>
+      <div class="record-list">
+        ${stats.plans.map((plan) => recordPlanRow(plan, counts.get(plan.id) || 0)).join("")}
+      </div>
+    `;
+  }
+
+  function recordPlanRow(plan, count) {
+    return `
+      <article class="record-item">
+        <strong>${escapeHtml(plan.title)}</strong>
+        <span>${escapeHtml(plan.series || "餐单")} · 累计打卡 ${count} 次</span>
+        <div class="row-actions">
+          <button class="secondary-button" type="button" data-plan-detail="${escapeHtml(plan.id)}">看详情</button>
+          <button class="primary-button" type="button" data-set-current="${escapeHtml(plan.id)}">设为今天</button>
+        </div>
+      </article>
+    `;
   }
 
   function render() {
-    renderStatus();
-    renderFilters();
-    renderDetail();
-    renderPlans();
-    renderSteps();
-    renderHistory();
-    renderPending();
+    renderTabs();
+    renderToday();
+    renderLibrary();
+    renderRecords();
+    saveState();
   }
 
-  function setCurrent(planId, scroll) {
+  function setCurrent(planId) {
     if (!planById.has(planId)) return;
+    const plan = planById.get(planId);
     state.activePlanId = planId;
-    state.detailId = planId;
-    saveState();
+    state.selectedSeries = plan.series || "";
+    state.detailId = "";
+    state.tab = "today";
     render();
-    if (scroll) document.querySelector("#todayPanel")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function completeToday() {
     const plan = getActivePlan();
     if (!plan) return;
-    const progress = getProgress();
+    const progress = progressForActive();
     if (progress.done !== progress.total) return;
     const date = todayKey();
     state.history = state.history.filter((item) => !(item.date === date && item.planId === plan.id));
-    state.history.unshift({
-      date,
-      planId: plan.id,
-      planName: plan.title,
-      steps: plan.meals.length
-    });
-    state.history = state.history.slice(0, 80);
-    saveState();
+    state.history.unshift({ date, planId: plan.id, planName: plan.title, steps: plan.meals.length });
+    state.history = state.history.slice(0, 120);
     render();
   }
 
@@ -409,20 +528,6 @@ const mealPlans = days.map((day, index) => ({
     const date = todayKey();
     if (state.checked[date]) state.checked[date][plan.id] = [];
     state.history = state.history.filter((item) => !(item.date === date && item.planId === plan.id));
-    saveState();
-    render();
-  }
-
-  function clearHistory() {
-    state.history = [];
-    saveState();
-    render();
-  }
-
-  function resetAll() {
-    if (!window.confirm("确认清空全部打卡数据？")) return;
-    Object.assign(state, defaultState());
-    saveState();
     render();
   }
 
@@ -436,21 +541,45 @@ const mealPlans = days.map((day, index) => ({
   }
 
   document.addEventListener("click", (event) => {
-    const detailButton = event.target.closest("[data-detail]");
+    const tabButton = event.target.closest("[data-tab]");
+    const seriesButton = event.target.closest("[data-series]");
+    const backSeries = event.target.closest("[data-back-series]");
+    const detailButton = event.target.closest("[data-plan-detail]");
+    const closeDetail = event.target.closest("[data-close-detail]");
     const setButton = event.target.closest("[data-set-current]");
-    const filterButton = event.target.closest("[data-filter]");
     const stepButton = event.target.closest("[data-step]");
+    const recordSeries = event.target.closest("[data-record-series]");
+    const recordBack = event.target.closest("[data-record-back]");
+    const clearHistory = event.target.closest("[data-clear-history]");
+    const resetAll = event.target.closest("[data-reset-all]");
+    if (tabButton) setTab(tabButton.dataset.tab);
+    if (seriesButton) {
+      state.selectedSeries = seriesButton.dataset.series;
+      state.detailId = "";
+      state.tab = "library";
+      render();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+    if (backSeries) {
+      state.selectedSeries = "";
+      state.detailId = "";
+      render();
+    }
     if (detailButton) {
-      state.detailId = detailButton.dataset.detail;
-      saveState();
+      const plan = planById.get(detailButton.dataset.planDetail);
+      if (plan) {
+        state.detailId = plan.id;
+        state.selectedSeries = plan.series || "";
+        state.tab = "library";
+        render();
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+    }
+    if (closeDetail) {
+      state.detailId = "";
       render();
     }
-    if (setButton) setCurrent(setButton.dataset.setCurrent, true);
-    if (filterButton) {
-      state.filter = filterButton.dataset.filter;
-      saveState();
-      render();
-    }
+    if (setButton) setCurrent(setButton.dataset.setCurrent);
     if (stepButton) {
       const index = Number(stepButton.dataset.step);
       const checked = getCheckedSet();
@@ -459,16 +588,33 @@ const mealPlans = days.map((day, index) => ({
       setCheckedSet(checked);
       render();
     }
+    if (recordSeries) {
+      state.recordSeries = recordSeries.dataset.recordSeries;
+      state.tab = "records";
+      render();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+    if (recordBack) {
+      state.recordSeries = "";
+      render();
+    }
+    if (clearHistory) {
+      state.history = [];
+      render();
+    }
+    if (resetAll) {
+      if (!window.confirm("确认清空全部打卡数据？")) return;
+      Object.assign(state, defaultState());
+      render();
+    }
   });
 
   document.querySelector("#completeBtn")?.addEventListener("click", completeToday);
   document.querySelector("#resetTodayBtn")?.addEventListener("click", resetToday);
-  document.querySelector("#clearHistoryBtn")?.addEventListener("click", clearHistory);
-  document.querySelector("#resetAllBtn")?.addEventListener("click", resetAll);
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./sw.js?v=20260722d1");
+      navigator.serviceWorker.register("./sw.js?v=20260722t1");
     });
   }
 
