@@ -1,7 +1,7 @@
 {
   "name": "草莓饮食-平常的饮食",
   "short_name": "草莓饮食",
-  "description": "平常减肥餐单每日自选打卡 PWA。",
+  "description": "草莓饮食减肥餐单三页式每日自选打卡 PWA，非官方整理版。",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
